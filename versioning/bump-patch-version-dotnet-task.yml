@@ -1,0 +1,39 @@
+steps:
+  - task: Bash@3
+    displayName: 'Bump patch version number'       
+    condition: succeeded()               
+    name: output_version
+    inputs:
+      targetType: 'inline'
+      script: |
+        #!/bin/bash 
+        set -ex
+        
+        # Check if the build was triggered by an individual commit
+        if [ "$BUILD_REASON" = "IndividualCI" ]; then
+          # Download and install dotnet-bump
+          wget https://github.com/vweevers/dotnet-bump/releases/download/v2.0.0/linux-x64.zip
+          unzip linux-x64.zip
+          cp ./dotnet-bump $(Build.SourcesDirectory)/$(projectDirPath)/dotnet-bump
+                    
+          # Set patch version and push commit
+          git config --global user.email "you@example.com"
+          git config --global user.name "Azure DevOps"
+
+          cd "$(Build.SourcesDirectory)/$(projectDirPath)"
+
+          # Bump the patch version number and extract the new version number
+          ./dotnet-bump patch --no-commit --force                  
+          ver=$(grep '<Version>' < *.csproj | sed 's/.*<Version>\(.*\)<\/Version>/\1/')
+        else
+          # Go to the project directory
+          cd "$(Build.SourcesDirectory)/$(projectDirPath)"
+          ver="$(Build.SourceBranchName)-$(grep '<Version>' < *.csproj | sed 's/.*<Version>\(.*\)<\/Version>/\1/')" 
+        fi
+
+        # Output the version number to the Helm job
+        echo "##vso[task.setvariable variable=ver;isOutput=true]$ver"
+
+        # Output the version number in the current job
+        echo "##vso[task.setvariable variable=ver]$ver"
+    continueOnError: false     

@@ -1,0 +1,60 @@
+parameters:
+  - name: namespace # The namespace in which the agents are running in
+    type: string
+    default: agents
+  
+  - name: dockerRegistry # The url for the registry that will contain the images
+    type: string
+
+  - name: AzAgentsClusterName # The name of the K8s cluster that will run the agents
+    type: string
+    default: eks-azdo-agents
+
+  - name: clusterSecretName # Example: eks-azdo-agents
+    type: string     
+
+
+jobs:
+  - job: buildAndPushDocker
+    displayName: "Build Docker image with Kaniko"
+
+    pool: 
+      name: "eks-agents"
+
+    workspace:
+      clean: all
+
+    variables:
+      dockerRegistry: ${{ parameters.dockerRegistry }}
+      AzAgentsClusterName: ${{ parameters.AzAgentsClusterName }}
+      clusterSecretName: ${{ parameters.clusterSecretName }}
+      agentNamespace: ${{ parameters.namespace }}
+
+    steps:                          
+      - checkout: self
+        persistCredentials: true
+        clean: true
+        fetchDepth: 1
+            
+      - template: ../versioning/bump-patch-version-dotnet-task.yml
+
+      - template: create-kaniko-pod-task.yml
+        parameters:
+          namespace: $(agentNamespace)              
+
+      - template: apply-and-monitor-kaniko-pod-steps.yml
+        parameters:
+          namespace: $(agentNamespace)
+
+      - script: |
+          NAME="$(ver)"
+          echo '##vso[build.updatebuildnumber]'$NAME          
+        displayName: 'Update Build Name'
+        condition: succeeded()                  
+
+      - script: |
+          # Commit the changes and push them to the main branch
+          git commit -am "Version upgraded to $ver [skip ci]"
+          git push origin HEAD:main              
+        displayName: 'Push new version into source code'        
+        condition: and(succeeded(), eq(variables['Build.Reason'], 'IndividualCI'))

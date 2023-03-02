@@ -1,0 +1,40 @@
+parameters:
+  - name: PackageVersionOut
+    type: string
+    
+
+steps:        
+  - checkout: gitops
+    persistCredentials: true
+    clean: true
+
+  - task: Bash@3
+    displayName: 'Update Helm image version'
+    inputs:
+      targetType: 'inline'
+      script: |
+        #!/bin/bash
+        set -x
+
+        if [ -d ./$(Build.Repository.Name) ];then
+          version=$(cat ./$(Build.Repository.Name)/values.yaml | grep tag: | awk '{print $2}')          
+          sed -i "s/tag: $version/tag: $PACKAGE_VERSION_OUT/" ./$(Build.Repository.Name)/values.yaml
+        else
+          exit 0
+        fi
+    env:
+      PACKAGE_VERSION_OUT: ${{ parameters.PackageVersionOut }}  
+
+  - task: Bash@3
+    displayName: 'Commit To Helm Repo'
+    inputs:
+      targetType: 'inline'
+      script: |      
+        set -x
+        git config --global user.email "you@example.com"
+        git config --global user.name "ArgoCD GitOps"
+        git add .
+        git commit -m "[$(Build.Repository.Name)][$(Build.SourceVersion)][$PACKAGE_WORK_ITEMS ]"
+        git push origin HEAD:main --force
+    env:
+      PACKAGE_WORK_ITEMS: ${{ parameters.PackageWorkItems }}

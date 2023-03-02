@@ -1,0 +1,80 @@
+parameters:
+  - name: namespace
+    type: string    
+
+  - name: azureDevopsServiceAccount
+    type: string
+    default: azure-devops-agent-generic-sa    
+
+  
+steps:  
+  - script: |
+      #!/bin/bash
+      set -x
+
+      #Create a deployment yaml to create the Kaniko Pod        
+      cat <<EOM >deploy.yaml
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: kaniko-$(Build.BuildId)
+        namespace: ${{ parameters.namespace }}
+      spec:
+        containers:
+        - name: kaniko
+          image: gcr.io/kaniko-project/executor:latest
+          args:
+          - "--dockerfile=Dockerfile"
+          - '--context=dir:///workspace/$(Build.Repository.Name)'
+          - '--destination=$(dockerRegistry)/$(Build.Repository.Name):$(ver)'
+          env:
+            - name: AWS_SDK_LOAD_CONFIG
+              value: "true"
+            - name: AWS_EC2_METADATA_DISABLED
+              value: "true"
+          envFrom:
+          - secretRef:
+              name: "$(AzAgentsClusterName)"
+          - secretRef:
+              name: "$(clusterSecretName)"
+          volumeMounts:
+          - name: docker-config
+            mountPath: /kaniko/.docker/
+          - name: source-code
+            mountPath: /workspace
+        # Init container to git clone the src code and share with Kaniko              
+        initContainers:
+          - name: git-clone
+            image: "$(awsAccountId)".dkr.ecr.eu-west-1.amazonaws.com/azure-devops-git-cloner:0.0.1
+            volumeMounts:
+            - name: source-code
+              mountPath: /workspace                               
+            env:
+              - name: password
+                value: "$SYSTEM_ACCESSTOKEN"
+              - name: repository
+                value: "$(Build.Repository.Name)"
+              - name: branch
+                value: "$(Build.SourceBranch)"
+              - name: project
+                value: $(System.TeamProject)
+        restartPolicy: Never
+        serviceAccount: ${{ parameters.azureDevopsServiceAccount }}
+        volumes:
+        - name: docker-config
+          configMap:
+            name: docker-config              
+        - name: source-code
+          emptyDir: {}   
+      ---
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: docker-config
+      data:
+        config.json: |-
+          { "credsStore": "ecr-login" }        
+      EOM
+    displayName: Create Kaniko Pod and ConfigMap resources      
+    env:         
+      SYSTEM_ACCESSTOKEN: $(System.AccessToken)      

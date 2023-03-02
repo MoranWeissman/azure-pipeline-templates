@@ -1,0 +1,37 @@
+parameters:
+  - name: namespace
+    type: string    
+
+
+steps:  
+  - script: |
+      #!/bin/bash
+      set -ex
+
+      kubectl apply -f deploy.yaml --namespace "${{ parameters.namespace }}"
+    displayName: Create Kaniko pod and start Docker build
+
+  - script: |    
+      # Monitor for Success or failure     
+      while [[ $(kubectl get pods kaniko-$(Build.BuildId) -n ${{ parameters.namespace }} -o jsonpath='{..status.phase}') != "Succeeded" && $(kubectl get pods kaniko-$(Build.BuildId) -n ${{ parameters.namespace }} -o jsonpath='{..status.phase}') != "Failed" && $(kubectl get pods kaniko-$(Build.BuildId) -n ${{ parameters.namespace }} -o jsonpath='{..status.phase}') != "PodInitializing" ]]; 
+      do          
+        kubectl logs kaniko-$(Build.BuildId) -c git-clone -n ${{ parameters.namespace }} --follow;
+        kubectl logs kaniko-$(Build.BuildId) -n ${{ parameters.namespace }} --follow;
+      done
+
+      # Exit the script with error if build failed        
+      if [ $(kubectl get pods kaniko-$(Build.BuildId) -n ${{ parameters.namespace }} -o jsonpath='{..status.phase}') == "Failed" ]; then                    
+        kubectl logs kaniko-$(Build.BuildId) -n ${{ parameters.namespace }} --previous;
+        kubectl delete -f deploy.yaml -n ${{ parameters.namespace }} && \
+        rm -R -f /kaniko/$(Build.BuildId)
+        exit 1;
+      fi
+
+      # if pod succeeded, delete the pod
+      echo "Build and push successed and now deleting pod"
+      kubectl delete -f deploy.yaml -n ${{ parameters.namespace }}
+
+      echo "Removing build source files"
+      rm -R -f /kaniko/$(Build.BuildId)        
+    displayName: Docker build kaniko logs
+    condition: succeeded()

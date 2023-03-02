@@ -33,8 +33,8 @@ steps:
             - name: AWS_EC2_METADATA_DISABLED
               value: "true"
           envFrom:
-          - secretRef:
-              name: "$(AzAgentsClusterName)"
+          # - secretRef:
+          #     name: "$(AzAgentsClusterName)"
           - secretRef:
               name: "$(clusterSecretName)"
           volumeMounts:
@@ -45,7 +45,7 @@ steps:
         # Init container to git clone the src code and share with Kaniko              
         initContainers:
           - name: git-clone
-            image: "$(awsAccountId)".dkr.ecr.eu-west-1.amazonaws.com/azure-devops-git-cloner:0.0.1
+            image: $(awsAccountId).dkr.ecr.eu-west-1.amazonaws.com/azure-devops-git-cloner:0.0.11
             volumeMounts:
             - name: source-code
               mountPath: /workspace                               
@@ -74,7 +74,7 @@ steps:
       data:
         config.json: |-
           { "credsStore": "ecr-login" }        
-      EOM
+      EOM      
     displayName: Create Kaniko Pod and ConfigMap resources      
     env:         
       SYSTEM_ACCESSTOKEN: $(System.AccessToken)      

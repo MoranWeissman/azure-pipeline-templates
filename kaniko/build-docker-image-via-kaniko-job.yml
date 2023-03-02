@@ -6,10 +6,6 @@ parameters:
   - name: dockerRegistry # The url for the registry that will contain the images
     type: string
 
-  - name: AzAgentsClusterName # The name of the K8s cluster that will run the agents
-    type: string
-    default: eks-azdo-agents
-
   - name: clusterSecretName # Example: eks-azdo-agents
     type: string     
 
@@ -20,13 +16,14 @@ jobs:
 
     pool: 
       name: "eks-agents"
+      demands:        
+      - AGENT_CAPABILITY -equals kaniko
 
     workspace:
       clean: all
 
     variables:
-      dockerRegistry: ${{ parameters.dockerRegistry }}
-      AzAgentsClusterName: ${{ parameters.AzAgentsClusterName }}
+      dockerRegistry: ${{ parameters.dockerRegistry }}      
       clusterSecretName: ${{ parameters.clusterSecretName }}
       agentNamespace: ${{ parameters.namespace }}
 
